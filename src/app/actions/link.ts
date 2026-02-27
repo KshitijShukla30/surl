@@ -17,35 +17,40 @@ export async function createShortLink(prevState: any, formData: FormData) {
 
     try {
         let shortCode = "";
-        let isUnique = false;
-
-        // Retry loop for unique code generation
-        for (let i = 0; i < 5; i++) {
-            shortCode = generateShortCode();
-            const existing = await prisma.link.findUnique({
-                where: { shortCode },
-            });
-
-            if (!existing) {
-                isUnique = true;
-                break;
-            }
-        }
-
-        if (!isUnique) {
-            return { error: "Failed to generate a unique short code. Please try again." };
-        }
+        let newLink = null;
+        let attempts = 0;
+        const maxAttempts = 5;
 
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
 
-        const newLink = await prisma.link.create({
-            data: {
-                url,
-                shortCode,
-                expiresAt,
-            },
-        });
+        while (attempts < maxAttempts && !newLink) {
+            shortCode = generateShortCode();
+            attempts++;
+
+            try {
+                // Blindly attempt to insert. Postgres will throw standard P2002 if unique constraint violates.
+                newLink = await prisma.link.create({
+                    data: {
+                        url,
+                        shortCode,
+                        expiresAt,
+                    },
+                });
+            } catch (createError: any) {
+                // P2002 is Prisma's code for Unique constraint failed
+                if (createError.code === 'P2002') {
+                    console.log(`Collision detected for code ${shortCode}. Retrying (${attempts}/${maxAttempts})...`);
+                    continue; // Try again
+                }
+                // Any other DB error should abort the loop
+                throw createError;
+            }
+        }
+
+        if (!newLink) {
+            return { error: "Failed to generate a unique short code. Please try again." };
+        }
 
         revalidatePath("/"); // Update the analytics dashboard
         return { success: true, link: newLink };
