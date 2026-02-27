@@ -18,20 +18,26 @@ export default function CreateLinkForm() {
         setShortUrl(null);
 
         const formData = new FormData(e.currentTarget);
-        const result = await createShortLink(null, formData);
 
-        setIsLoading(false);
+        try {
+            const result = await createShortLink(null, formData);
 
-        if (result?.error) {
-            toast.error(result.error);
-            return;
-        }
+            if (result?.error) {
+                toast.error(result.error);
+                return;
+            }
 
-        if (result?.success && result.link) {
-            const fullShortUrl = `${window.location.origin}/${result.link.shortCode}`;
-            setShortUrl(fullShortUrl);
-            toast.success("URL shortened successfully!");
-            setUrl("");
+            if (result?.success && result.link) {
+                const fullShortUrl = `${window.location.origin}/${result.link.shortCode}`;
+                setShortUrl(fullShortUrl);
+                toast.success("URL shortened successfully!");
+                setUrl("");
+            }
+        } catch (error) {
+            console.error("Submission failed:", error);
+            toast.error("Failed to connect to the server. Please try again later.");
+        } finally {
+            setIsLoading(false);
         }
     };
 
